@@ -1,0 +1,82 @@
+create = true
+update = true
+language_strict = true
+locale = "fr"
+
+[data]
+author = "Vincent Berthier"
+author_mail = "vincent.berthier@posteo.org"
+cp_holders = "Vincent Berthier"
+
+[default]
+name = "*"
+prefix = "# "
+before = []
+after = [""]
+template = """
+File: #file_relative_path
+Project: #project_name
+Creation date: #file_creation
+Author: #author_name #author_mail
+-----
+Last modified: #date_now
+Modified by: #author_name
+-----
+#copyright_notice"""
+copyright_notice = "Copyright © #cp_year #cp_holders - All rights reserved"
+track_changes = ["File: ", "Last modified: ", "Modified by: ", "Copyright "]
+
+[[language]]
+name = "bash"
+before = ["#!/usr/bin/env bash", ""]
+
+[[language]]
+name = "python"
+before = ["#!/usr/bin/env python3", ""]
+
+[[language]]
+name = "lua"
+prefix = "-- "
+
+[[language]]
+name = "cpp"
+prefix = "// "
+
+[[language]]
+name = "rust"
+prefix = "// "
+
+[[project]]
+root = "/home/vincent/code"
+
+[[project]]
+root = "/home/vincent/code/athena_crucible"
+name = "Athena’s Crucible"
+
+[[project]]
+root = "/home/vincent/code/auto-header.nvim/"
+create = false
+locale = "en"
+[project.data]
+copyright_notice = "#MIT"
+author_mail = ""
+
+[[project]]
+root = "/home/vincent/code/auto-header.rs/"
+create = false
+locale = "en"
+[project.data]
+copyright_notice = "#MIT"
+author_mail = ""
+
+[[project]]
+root = "/home/vincent/code/orpailleur"
+name = "Orpailleur"
+[project.data]
+author_mail = "vincent.berthier@orpailleur.tech"
+
+[[project]]
+root = "/home/vincent/code/helix"
+locale = "en"
+create = false
+update = false
