@@ -233,12 +233,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let header_present = check_header_exists(&args.path, &header, &lang_conf);
     if header_present && config.update {
         match update_header(&args.path, &header, &lang_conf) {
-            Ok(_) => println!("header updated successfully."),
+            Ok(_) => (),
             Err(err) => println!("Failed to update header: {}", err),
         }
     } else if !header_present && config.create {
         match write_header(&args.path, &header) {
-            Ok(_) => println!("header written successfully."),
+            Ok(_) => (),
             Err(err) => println!("Failed to write header: {}", err),
         }
     } else {
@@ -351,11 +351,15 @@ fn find_project(config: &Config, path: &str) -> Option<Project> {
 /// ```
 fn fill_template(template: &Template, project: &Project, path: &str, root: &str) -> Vec<String> {
     let path = Path::new(&env::current_dir().unwrap()).join(path);
+    let creation_date: DateTime<Local> = fs::metadata(path.clone())
+        .unwrap()
+        .created()
+        .unwrap()
+        .into();
     let path = path.strip_prefix(root).unwrap();
     let date_now = Local::now().format("%A %d %B %Y @ %H:%M:%S").to_string();
     let year = Local::now().format("%Y").to_string();
     let data = project.data.clone().unwrap();
-    let creation_date: DateTime<Local> = fs::metadata(path).unwrap().created().unwrap().into();
     let creation_date = creation_date.format("%A %d %B %Y").to_string();
 
     let mut res = template

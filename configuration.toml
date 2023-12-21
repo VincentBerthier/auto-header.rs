@@ -80,3 +80,12 @@ root = "/home/vincent/code/helix"
 locale = "en"
 create = false
 update = false
+
+[[project]]
+root = "/home/vincent/code/bangk"
+locale = "fr"
+create = true
+update = true
+[project.data]
+author_mail = "vincent.berthier@bangk.fr"
+cp_holders = "Bangk"
