@@ -445,6 +445,7 @@ fn check_header_exists(path: &str, header: &[String], template: &Template) -> bo
     let tracked = template.track_changes.clone().unwrap_or(Vec::new());
     for (hi, ci) in content.iter().zip(header.iter()) {
         if hi != ci
+            && !ci.contains("Creation date")
             && !tracked
                 .iter()
                 .any(|t| ci.replace(&prefix, "").starts_with(t.as_str()))
