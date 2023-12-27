@@ -351,16 +351,23 @@ fn find_project(config: &Config, path: &str) -> Option<Project> {
 /// ```
 fn fill_template(template: &Template, project: &Project, path: &str, root: &str) -> Vec<String> {
     let path = Path::new(&env::current_dir().unwrap()).join(path);
+    let path = path.strip_prefix(root).unwrap();
     let creation_date: DateTime<Local> = fs::metadata(path.clone())
         .unwrap()
         .created()
         .unwrap()
         .into();
-    let path = path.strip_prefix(root).unwrap();
-    let date_now = Local::now().format("%A %d %B %Y @ %H:%M:%S").to_string();
+    let creation_date = creation_date.format("%A %d %B %Y").to_string();
+    let modification_date: DateTime<Local> = fs::metadata(path.clone())
+        .unwrap()
+        .modified()
+        .unwrap()
+        .into();
+    let modification_date = modification_date
+        .format("%A %d %B %Y @ %H:%M:%S")
+        .to_string();
     let year = Local::now().format("%Y").to_string();
     let data = project.data.clone().unwrap();
-    let creation_date = creation_date.format("%A %d %B %Y").to_string();
 
     let mut res = template
         .template
@@ -375,7 +382,7 @@ fn fill_template(template: &Template, project: &Project, path: &str, root: &str)
 
     res = res
         .replace("#file_creation", &creation_date)
-        .replace("#date_now", &date_now)
+        .replace("#date_now", &modification_date)
         .replace("#file_relative_path", path.to_str().unwrap_or(""))
         .replace(
             "#project_name",
