@@ -352,6 +352,7 @@ fn find_project(config: &Config, path: &str) -> Option<Project> {
 fn fill_template(template: &Template, project: &Project, path: &str, root: &str) -> Vec<String> {
     let path = Path::new(&env::current_dir().unwrap()).join(path);
     let path = path.strip_prefix(root).unwrap();
+    println!("Path is {path:?}");
     let creation_date: DateTime<Local> = fs::metadata(path.clone())
         .unwrap()
         .created()
@@ -445,12 +446,13 @@ fn check_header_exists(path: &str, header: &[String], template: &Template) -> bo
     let mut content = String::new();
     file.read_to_string(&mut content).unwrap();
     let content: Vec<String> = content.split('\n').map(|s| s.to_owned()).collect();
+    println!("Old content: {content:?}");
     if content.len() < header.len() {
         return false;
     }
     let prefix = template.prefix.clone().unwrap_or(String::new());
     let tracked = template.track_changes.clone().unwrap_or(Vec::new());
-    for (hi, ci) in content.iter().zip(header.iter()) {
+    for (ci, hi) in content.iter().zip(header.iter()) {
         if hi != ci
             && !ci.contains("Creation date")
             && !tracked
@@ -460,6 +462,7 @@ fn check_header_exists(path: &str, header: &[String], template: &Template) -> bo
             return false;
         }
     }
+    println!("header exist??");
     true
 }
 
