@@ -351,8 +351,6 @@ fn find_project(config: &Config, path: &str) -> Option<Project> {
 /// ```
 fn fill_template(template: &Template, project: &Project, path: &str, root: &str) -> Vec<String> {
     let path = Path::new(&env::current_dir().unwrap()).join(path);
-    let path = path.strip_prefix(root).unwrap();
-    println!("Path is {path:?}");
     let creation_date: DateTime<Local> = fs::metadata(path.clone())
         .unwrap()
         .created()
@@ -381,6 +379,7 @@ fn fill_template(template: &Template, project: &Project, path: &str, root: &str)
         )
         .to_string();
 
+    let path = path.strip_prefix(root).unwrap();
     res = res
         .replace("#file_creation", &creation_date)
         .replace("#date_now", &modification_date)
