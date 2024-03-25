@@ -1,4 +1,5 @@
 /target
 .envrc
 .direnv/
-Cargo.lock
+result
+.jj/

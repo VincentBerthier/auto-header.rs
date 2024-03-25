@@ -1,9 +1,14 @@
 {
-  description = "Rust DevShell";
+  description = "Bangk On-Chain program and Admin / BI dashboard";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
+    crane = {
+      url = "github:ipetkov/crane";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
@@ -11,105 +16,180 @@
         flake-utils.follows = "flake-utils";
       };
     };
-    crane = {
-      url = "github:ipetkov/crane";
-      inputs.rust-overlay.follows = "rust-overlay";
-      inputs.flake-utils.follows = "flake-utils";
-      inputs.nixpkgs.follows = "nixpkgs";
+
+    flake-utils.url = "github:numtide/flake-utils";
+
+    advisory-db = {
+      url = "github:rustsec/advisory-db";
+      flake = false;
     };
   };
 
-  outputs = { self, nixpkgs, crane, rust-overlay, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [ (import rust-overlay) ];
-        };
-        mkRootPath = rel:
-          builtins.path {
-            path = "${toString ./.}/${rel}";
-            name = rel;
-          };
-        filteredSource = let
-          pathsToIgnore = [
-            ".envrc"
-            ".ignore"
-            ".github"
-            ".gitignore"
-            "rust-toolchain.toml"
-            "rustfmt.toml"
-            "docs"
-            "README.md"
-            "shell.nix"
-            "flake.nix"
-            "flake.lock"
-          ];
-          ignorePaths = path: type:
-            let
-              inherit (nixpkgs) lib;
-              # split the nix store path into its components
-              components = lib.splitString "/" path;
-              # drop off the `/nix/hash-source` section from the path
-              relPathComponents = lib.drop 4 components;
-              # reassemble the path components
-              relPath = lib.concatStringsSep "/" relPathComponents;
-            in lib.all (p: !(lib.hasPrefix p relPath)) pathsToIgnore;
-        in builtins.path {
-          name = "header-source";
-          path = toString ./.;
-          # filter out unnecessary paths
-          filter = ignorePaths;
-        };
-        stdenv = if pkgs.stdenv.isLinux then pkgs.stdenv else pkgs.clangStdenv;
-        rustFlagsEnv = if stdenv.isLinux then
-          "$RUSTFLAGS -C link-arg=-fuse-ld=lld -C target-cpu=native -Clink-arg=-Wl,--no-rosegment"
-        else
-          "$RUSTFLAGS";
-        rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile
-          ./rust-toolchain.toml;
-        craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
-        commonArgs = {
-          inherit stdenv;
-          src = filteredSource;
-          # disable fetching and building of tree-sitter grammars in the helix-term build.rs
-          buildInputs = [ stdenv.cc.cc.lib ];
-          # disable tests
-          doCheck = false;
-        };
-        cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-      in with pkgs; {
+  outputs = {
+    self,
+    nixpkgs,
+    crane,
+    rust-overlay,
+    flake-utils,
+    advisory-db,
+    ...
+  }:
+    flake-utils.lib.eachDefaultSystem (system: let
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [(import rust-overlay)];
+      };
+      rustOverlay =
+        pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-        checks = {
-          clippy = craneLib.cargoClippy (commonArgs // {
-            inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+      inherit (pkgs) lib;
+      craneLib = (crane.mkLib pkgs).overrideToolchain rustOverlay;
+
+      src = craneLib.cleanCargoSource (craneLib.path ./.);
+
+      # Common arguments can be set here to avoid repeating them later
+      commonArgs = {
+        inherit src;
+        pname = "auto-header";
+        version = "0.1.0";
+        strictDeps = true;
+
+        buildInputs = with pkgs;
+          [
+            openssl
+            # Add additional build inputs here
+            mold
+          ]
+          ++ lib.optionals pkgs.stdenv.isDarwin [
+            # Additional darwin specific inputs can be set here
+            pkgs.libiconv
+          ];
+
+        nativeBuildInputs = with pkgs; [
+          pkg-config
+          mold
+          bzip2
+        ];
+
+        # Additional environment variables can be set directly
+        LD_LIBRARY_PATH = "${pkgs.openssl.out}/lib;${pkgs.bzip2.out}/lib";
+        # CARGO_BUILD_JOBS = 8;
+      };
+
+      # Build *just* the cargo dependencies, so we can reuse
+      # all of that work (e.g. via cachix) when running in CI
+      cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+
+      ######################################################
+      ###                  Binaries                      ###
+      ######################################################
+      # Build the actual crate itself, reusing the dependency
+      # artifacts from above.
+      auto-header = craneLib.buildPackage (commonArgs
+        // {
+          pname = "auto-header";
+          inherit cargoArtifacts;
+          doCheck = false;
+          nativeBuildInputs = commonArgs.nativeBuildInputs;
+        });
+
+      ######################################################
+      ###               Shell aliases                    ###
+      ######################################################
+      aliases = ''
+        alias check=\"nix flake check\" \
+        && alias tests=\"cargo nextest run\"
+      '';
+    in {
+      checks = {
+        # Build the crate as part of `nix flake check` for convenience
+        inherit auto-header;
+
+        ######################################################
+        ###               Nix flake checks                 ###
+        ######################################################
+        # Run clippy (and deny all warnings) on the crate source,
+        # again, resuing the dependency artifacts from above.
+        #
+        # Note that this is done as a separate derivation so that
+        # we can block the CI if there are issues here, but not
+        # prevent downstream consumers from building our crate by itself.
+        auto-header-clippy = craneLib.cargoClippy (commonArgs
+          // {
+            pname = "auto-header-clippy";
+            cargoArtifacts = auto-header;
+
+            cargoClippyExtraArgs = "--all-features --all-targets -- --deny warnings";
           });
 
-          fmt = craneLib.cargoFmt commonArgs;
-
-          doc = craneLib.cargoDoc (commonArgs // { inherit cargoArtifacts; });
-
-          test = craneLib.cargoTest (commonArgs // { inherit cargoArtifacts; });
+        # Check formatting
+        auto-header-fmt = craneLib.cargoFmt {
+          pname = "auto-header-fmt";
+          inherit src;
         };
 
-        devShells.default = mkShell {
-          inputsFrom = builtins.attrValues self.checks.${system};
-          nativeBuildInputs = with pkgs;
-            [ lld_13 cargo-flamegraph rust-analyzer ]
-            ++ (lib.optional (stdenv.isx86_64 && stdenv.isLinux)
-              pkgs.cargo-tarpaulin) ++ (lib.optional stdenv.isLinux pkgs.lldb)
-            ++ (lib.optional stdenv.isDarwin
-              pkgs.darwin.apple_sdk.frameworks.CoreFoundation);
-          shellHook = ''
-            export RUST_BACKTRACE="1"
-            export RUSTFLAGS="${rustFlagsEnv}"
-          '';
+        # Audit dependencies
+        auto-header-audit = craneLib.cargoAudit {
+          pname = "auto-header-audit";
+          inherit src advisory-db;
         };
-      });
-  nixConfig = {
-    extra-substituters = [ "https://helix.cachix.org" ];
-    extra-trusted-public-keys =
-      [ "helix.cachix.org-1:ejp9KQpR1FBI2onstMQ34yogDm4OgU2ru6lIwPvuCVs=" ];
-  };
+
+        # Audit licenses
+        auto-header-deny = craneLib.cargoDeny {
+          pname = "auto-header-deny";
+          inherit src;
+        };
+      };
+
+      ######################################################
+      ###                 Build packages                 ###
+      ######################################################
+      packages = {
+        default = auto-header;
+      };
+
+      apps.default = flake-utils.lib.mkApp {drv = auto-header;};
+
+      ######################################################
+      ###                   Dev’ shell                   ###
+      ######################################################
+      devShells.default = craneLib.devShell {
+        name = "devshell";
+
+        # Inherit inputs from checks.
+        checks = self.checks.${system};
+
+        # Additional dev-shell environment variables can be set directly
+        # CARGO_BUILD_JOBS = 8;
+        LD_LIBRARY_PATH = "${pkgs.openssl.out}/lib;${pkgs.bzip2.out}/lib";
+        PATH = "${pkgs.mold}/bin/mold";
+
+        shellHook = ''
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "Environnement $(basename $(pwd)) chargé" | cowsay | lolcat
+
+          exec $SHELL -C "${aliases}"
+        '';
+
+        # Extra inputs can be added here; cargo and rustc are provided by default.
+        packages = with pkgs; [
+          cowsay
+          lolcat
+          pkg-config
+          openssl
+
+          mold # rust linker
+
+          nodePackages.vscode-langservers-extracted # language server web
+          # Cargo utilities
+          cargo-bloat # check binaries size (which is fun but not terriby useful?)
+          cargo-cache # cargo cache -a
+          cargo-deny
+          cargo-audit
+          cargo-expand # for macro expension
+          cargo-spellcheck # Spellcheck documentation
+          # cargo-wizard
+        ];
+      };
+    });
 }
