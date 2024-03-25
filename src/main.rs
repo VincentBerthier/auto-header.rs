@@ -371,7 +371,7 @@ fn fill_template(template: &Template, project: &Project, path: &str, root: &str)
     let mut res = template
         .template
         .clone()
-        .unwrap_or(String::new())
+        .unwrap_or_default()
         .as_str()
         .replace(
             "#copyright_notice",
@@ -394,7 +394,7 @@ fn fill_template(template: &Template, project: &Project, path: &str, root: &str)
                     .unwrap(),
             )),
         )
-        .replace("#author_name", &data.author.unwrap_or(String::new()))
+        .replace("#author_name", &data.author.unwrap_or_default())
         .replace("#cp_year", &year);
     if data.author_mail.as_ref().is_some_and(|f| !f.is_empty()) {
         res = res.replace(
@@ -413,14 +413,14 @@ fn fill_template(template: &Template, project: &Project, path: &str, root: &str)
         res = res.replace("#cp_holders", "");
     }
 
-    let prefix = template.prefix.clone().unwrap_or(String::new());
+    let prefix = template.prefix.clone().unwrap_or_default();
     template
         .before
         .clone()
-        .unwrap_or(Vec::new())
+        .unwrap_or_default()
         .into_iter()
         .chain(res.split('\n').map(|s| format!("{}{}", prefix, s)))
-        .chain(template.after.clone().unwrap_or(Vec::new()))
+        .chain(template.after.clone().unwrap_or_default())
         .collect()
 }
 
@@ -445,12 +445,11 @@ fn check_header_exists(path: &str, header: &[String], template: &Template) -> bo
     let mut content = String::new();
     file.read_to_string(&mut content).unwrap();
     let content: Vec<String> = content.split('\n').map(|s| s.to_owned()).collect();
-    println!("Old content: {content:?}");
     if content.len() < header.len() {
         return false;
     }
-    let prefix = template.prefix.clone().unwrap_or(String::new());
-    let tracked = template.track_changes.clone().unwrap_or(Vec::new());
+    let prefix = template.prefix.clone().unwrap_or_default();
+    let tracked = template.track_changes.clone().unwrap_or_default();
     for (ci, hi) in content.iter().zip(header.iter()) {
         if hi != ci
             && !ci.contains("Creation date")
@@ -461,7 +460,6 @@ fn check_header_exists(path: &str, header: &[String], template: &Template) -> bo
             return false;
         }
     }
-    println!("header exist??");
     true
 }
 
@@ -489,8 +487,8 @@ fn update_header(path: &str, header: &[String], template: &Template) -> Result<(
     f.read_to_end(&mut content)?;
     let content: String = str::from_utf8(&content)?.to_string();
     let mut content: Vec<String> = content.split('\n').map(|s| s.to_string()).collect();
-    let tracked = template.track_changes.clone().unwrap_or(Vec::new());
-    let prefix = template.prefix.clone().unwrap_or(String::new());
+    let tracked = template.track_changes.clone().unwrap_or_default();
+    let prefix = template.prefix.clone().unwrap_or_default();
     header.iter().enumerate().for_each(|(i, h)| {
         if tracked
             .iter()
