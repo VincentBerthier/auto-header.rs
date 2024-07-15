@@ -180,7 +180,6 @@
 
           mold # rust linker
 
-          nodePackages.vscode-langservers-extracted # language server web
           # Cargo utilities
           cargo-bloat # check binaries size (which is fun but not terriby useful?)
           cargo-cache # cargo cache -a

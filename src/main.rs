@@ -9,6 +9,8 @@
 // Copyright © 2023 <Vincent Berthier> - All rights reserved
 #![allow(dead_code)]
 
+mod licenses;
+
 use chrono::{DateTime, Local};
 use clap::Parser;
 use detect_lang::from_path;
@@ -21,6 +23,8 @@ use std::{
     path::Path,
     str,
 };
+
+use crate::licenses::get_license;
 
 /// Global configuration for the auto-header.
 #[derive(Debug, Deserialize)]
@@ -63,6 +67,8 @@ struct ConfigData {
     author_mail: Option<String>,
     /// Copyright holders if any.
     cp_holders: Option<String>,
+    /// Copyright notice.
+    copyright_notice: Option<String>,
 }
 
 impl ConfigData {
@@ -93,6 +99,10 @@ impl ConfigData {
                 self.cp_holders
                     .unwrap_or(default.cp_holders.clone().unwrap()),
             ),
+            copyright_notice: Some(
+                self.copyright_notice
+                    .unwrap_or(default.copyright_notice.clone().unwrap()),
+            ),
         }
     }
 }
@@ -110,8 +120,6 @@ struct Template {
     after: Option<Vec<String>>,
     /// Value of the header template.
     template: Option<String>,
-    /// Copyright notice (can be custom or a known license).
-    copyright_notice: Option<String>,
     /// Lines that should be updated when an existing header is updated.
     track_changes: Option<Vec<String>>,
 }
@@ -137,10 +145,6 @@ impl Template {
             before: Some(self.before.unwrap_or(default.before.clone().unwrap())),
             after: Some(self.after.clone().unwrap_or(default.after.clone().unwrap())),
             template: Some(self.template.unwrap_or(default.template.clone().unwrap())),
-            copyright_notice: Some(
-                self.copyright_notice
-                    .unwrap_or(default.copyright_notice.clone().unwrap()),
-            ),
             track_changes: Some(
                 self.track_changes
                     .unwrap_or(default.track_changes.clone().unwrap()),
@@ -209,11 +213,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("No configuration found for file {}. Exiting.", args.path);
         return Ok(());
     };
+
     project.data = Some(if let Some(data) = project.data {
         data.merge(&config.data)
     } else {
         config.data.clone()
     });
+
+    if project
+        .data
+        .as_ref()
+        .is_some_and(|data| data.copyright_notice.is_some())
+    {
+        let mut data = project.data.clone().unwrap();
+        data.copyright_notice = Some(get_license(&data.copyright_notice.unwrap()).to_owned());
+        project.data = Some(data);
+    }
 
     // Get the language for the target file.
     let language = get_language(&args.path);
@@ -375,7 +390,13 @@ fn fill_template(template: &Template, project: &Project, path: &str, root: &str)
         .as_str()
         .replace(
             "#copyright_notice",
-            &template.copyright_notice.clone().unwrap(),
+            &project
+                .data
+                .as_ref()
+                .unwrap()
+                .copyright_notice
+                .clone()
+                .unwrap(),
         )
         .to_string();
 
