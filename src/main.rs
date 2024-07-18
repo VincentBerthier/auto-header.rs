@@ -466,13 +466,14 @@ fn check_header_exists(path: &str, header: &[String], template: &Template) -> bo
     let mut content = String::new();
     file.read_to_string(&mut content).unwrap();
     let content: Vec<String> = content.split('\n').map(|s| s.to_owned()).collect();
+
     if content.len() < header.len() {
         return false;
     }
     let prefix = template.prefix.clone().unwrap_or_default();
     let tracked = template.track_changes.clone().unwrap_or_default();
     for (ci, hi) in content.iter().zip(header.iter()) {
-        if hi != ci
+        if hi.trim_end() != ci.trim_end()
             && !ci.contains("Creation date")
             && !tracked
                 .iter()
