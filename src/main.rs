@@ -440,7 +440,7 @@ fn fill_template(template: &Template, project: &Project, path: &str, root: &str)
         .clone()
         .unwrap_or_default()
         .into_iter()
-        .chain(res.split('\n').map(|s| format!("{}{}", prefix, s)))
+        .chain(res.split('\n').map(|s| format!("{}{}", prefix, s).trim_end().to_owned()))
         .chain(template.after.clone().unwrap_or_default())
         .collect()
 }
